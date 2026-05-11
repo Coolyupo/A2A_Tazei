@@ -1,0 +1,20 @@
+# 環境變數（含 API Key，不可提交）
+agent1/.env
+agent2/.env
+agent3/.env
+registry/.env
+
+# 監控目錄中的測試檔案
+agent1/watch/
+
+# Go 編譯產物
+agent1/agent1
+agent2/agent2
+agent3/agent3
+registry/registry
+
+# macOS
+.DS_Store
+
+#claude
+.claude

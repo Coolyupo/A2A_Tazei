@@ -9,10 +9,10 @@ import (
 
 func serveAgentCard(w http.ResponseWriter, r *http.Request) {
 	card := AgentCard{
-		Name:        "TextAnalyzerAgent",
-		Description: "接收 .txt 文字檔案，使用 Gemini 進行異常分析",
+		Name:        "CriticalAlertAnalyzerAgent",
+		Description: "接收 Alertmanager Critical 告警，使用 Gemini 進行深度根因分析",
 		URL:         getEnv("SELF_URL", "http://localhost:8080"),
-		Version:     "2.0.0",
+		Version:     "3.0.0",
 		Capabilities: Capabilities{
 			Streaming:              false,
 			PushNotifications:      false,
@@ -20,9 +20,9 @@ func serveAgentCard(w http.ResponseWriter, r *http.Request) {
 		},
 		Skills: []AgentSkill{
 			{
-				ID:          "analyze_txt",
-				Name:        "Text File Anomaly Analysis",
-				Description: "分析 .txt 文字檔案內容，判斷是否有異常並產生報告",
+				ID:          "analyze_critical",
+				Name:        "Critical Alert Analysis",
+				Description: "分析 Alertmanager Critical 告警，評估影響範圍並給出緊急處置建議",
 				InputModes:  []string{"text"},
 				OutputModes: []string{"text"},
 			},
@@ -67,10 +67,10 @@ func handleTaskSend(w http.ResponseWriter, req JSONRPCRequest) {
 	log.Printf("[Agent2] 開始處理 Task | ID: %s | Session: %s", task.ID, task.SessionID)
 	task.Status = TaskStatus{State: "working", Timestamp: time.Now().Format(time.RFC3339)}
 
-	filename, content := extractFileContent(task.Messages)
-	log.Printf("[Agent2] 正在分析檔案：%s (%d bytes)", filename, len(content))
+	alertContent := extractTextContent(task.Messages)
+	log.Printf("[Agent2] 正在分析 Critical 告警 (%d bytes)", len(alertContent))
 
-	analysis, err := analyzeWithGemini(filename, content)
+	analysis, err := analyzeWithGemini(alertContent)
 	if err != nil {
 		log.Printf("[Agent2] 分析失敗：%v", err)
 		task.Status = TaskStatus{State: "failed", Timestamp: time.Now().Format(time.RFC3339)}
@@ -92,23 +92,15 @@ func handleTaskSend(w http.ResponseWriter, req JSONRPCRequest) {
 	writeResponse(w, req.ID, task)
 }
 
-// extractFileContent 優先從 file Part 提取內容，fallback 至 text Part
-func extractFileContent(messages []Message) (string, string) {
-	for _, msg := range messages {
-		for _, part := range msg.Parts {
-			if part.Type == "file" && part.File != nil {
-				return part.File.Name, part.File.Content
-			}
-		}
-	}
+func extractTextContent(messages []Message) string {
 	for _, msg := range messages {
 		for _, part := range msg.Parts {
 			if part.Type == "text" && part.Text != "" {
-				return "unknown.txt", part.Text
+				return part.Text
 			}
 		}
 	}
-	return "unknown.txt", ""
+	return ""
 }
 
 func writeResponse(w http.ResponseWriter, id string, result interface{}) {

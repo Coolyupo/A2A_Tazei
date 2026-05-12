@@ -9,10 +9,10 @@ import (
 
 func serveAgentCard(w http.ResponseWriter, r *http.Request) {
 	card := AgentCard{
-		Name:        "ImageAnalyzerAgent",
-		Description: "接收圖片檔案，使用 Gemini Vision 進行異常分析",
+		Name:        "WarningAlertAnalyzerAgent",
+		Description: "接收 Alertmanager Warning 告警，使用 Gemini 進行趨勢分析與預防建議",
 		URL:         getEnv("SELF_URL", "http://localhost:8081"),
-		Version:     "1.0.0",
+		Version:     "3.0.0",
 		Capabilities: Capabilities{
 			Streaming:              false,
 			PushNotifications:      false,
@@ -20,10 +20,10 @@ func serveAgentCard(w http.ResponseWriter, r *http.Request) {
 		},
 		Skills: []AgentSkill{
 			{
-				ID:          "analyze_image",
-				Name:        "Image Anomaly Analysis",
-				Description: "分析圖片內容，判斷是否有異常（支援 jpg/png/gif/bmp/webp）",
-				InputModes:  []string{"image"},
+				ID:          "analyze_warning",
+				Name:        "Warning Alert Analysis",
+				Description: "分析 Alertmanager Warning 告警，評估潛在風險並給出預防性建議",
+				InputModes:  []string{"text"},
 				OutputModes: []string{"text"},
 			},
 		},
@@ -65,10 +65,10 @@ func handleTaskSend(w http.ResponseWriter, req JSONRPCRequest) {
 	log.Printf("[Agent3] 開始處理 Task | ID: %s | Session: %s", task.ID, task.SessionID)
 	task.Status = TaskStatus{State: "working", Timestamp: time.Now().Format(time.RFC3339)}
 
-	filename, base64Content, mimeType := extractImageContent(task.Messages)
-	log.Printf("[Agent3] 正在分析圖片：%s (mime: %s)", filename, mimeType)
+	alertContent := extractTextContent(task.Messages)
+	log.Printf("[Agent3] 正在分析 Warning 告警 (%d bytes)", len(alertContent))
 
-	analysis, err := analyzeImageWithGemini(filename, base64Content, mimeType)
+	analysis, err := analyzeWithGemini(alertContent)
 	if err != nil {
 		log.Printf("[Agent3] 分析失敗：%v", err)
 		task.Status = TaskStatus{State: "failed", Timestamp: time.Now().Format(time.RFC3339)}
@@ -78,7 +78,7 @@ func handleTaskSend(w http.ResponseWriter, req JSONRPCRequest) {
 
 	task.Artifacts = []Artifact{
 		{
-			Name:  "image_analysis_report",
+			Name:  "warning_alert_report",
 			Index: 0,
 			Parts: []Part{{Type: "text", Text: analysis}},
 		},
@@ -89,15 +89,15 @@ func handleTaskSend(w http.ResponseWriter, req JSONRPCRequest) {
 	writeResponse(w, req.ID, task)
 }
 
-func extractImageContent(messages []Message) (filename, base64Content, mimeType string) {
+func extractTextContent(messages []Message) string {
 	for _, msg := range messages {
 		for _, part := range msg.Parts {
-			if part.Type == "file" && part.File != nil {
-				return part.File.Name, part.File.Content, part.File.MimeType
+			if part.Type == "text" && part.Text != "" {
+				return part.Text
 			}
 		}
 	}
-	return "unknown.jpg", "", "image/jpeg"
+	return ""
 }
 
 func writeResponse(w http.ResponseWriter, id string, result interface{}) {

@@ -1,6 +1,6 @@
 .PHONY: setup setup-registry setup-agent1 setup-agent2 setup-agent3 \
         init-env run-registry run-agent1 run-agent2 run-agent3 \
-        test-alert test-alert-image clean
+        test-critical test-warning clean
 
 ## 安裝所有依賴（第一次使用請執行）
 setup: setup-registry setup-agent2 setup-agent1 setup-agent3
@@ -19,7 +19,6 @@ setup-agent2:
 
 setup-agent1:
 	@echo "==> 安裝 Agent 1 依賴..."
-	cd agent1 && go get github.com/fsnotify/fsnotify@latest
 	cd agent1 && go get github.com/google/uuid@latest
 	cd agent1 && go get github.com/joho/godotenv@latest
 	cd agent1 && go mod tidy
@@ -42,34 +41,31 @@ init-env:
 run-registry:
 	cd registry && go run .
 
-## 啟動 Agent 2（文字分析 Agent）
+## 啟動 Agent 2（Critical 告警分析 Agent）
 run-agent2:
 	cd agent2 && go run .
 
-## 啟動 Agent 3（圖片分析 Agent）
+## 啟動 Agent 3（Warning 告警分析 Agent）
 run-agent3:
 	cd agent3 && go run .
 
-## 啟動 Agent 1（監控 Agent，最後啟動）
+## 啟動 Agent 1（Alertmanager 監控 Agent，最後啟動）
 run-agent1:
 	cd agent1 && go run .
 
-## 放入測試 .txt 檔案，觸發文字分析流程
-test-alert:
-	@mkdir -p agent1/watch
-	@echo "系統在凌晨 3:00 偵測到來自 IP 192.168.1.100 的大量失敗登入嘗試，共 500 次，目標帳號為 admin。" \
-		> agent1/watch/alert-$$(date +%s).txt
-	@echo "已放入測試 .txt 至 agent1/watch/"
+## 送出 Critical 測試告警到 Alertmanager
+test-critical:
+	@curl -s -X POST http://localhost:9093/api/v2/alerts \
+		-H "Content-Type: application/json" \
+		-d '[{"labels":{"alertname":"HighCPUUsage","severity":"critical","instance":"prod-server-01","job":"node-exporter","env":"production"},"annotations":{"summary":"CPU 使用率超過 95%","description":"prod-server-01 的 CPU 使用率已持續 5 分鐘超過 95%，可能導致服務降級或中斷"}}]'
+	@echo "已送出 Critical 測試告警至 Alertmanager (localhost:9093)"
 
-## 放入測試圖片，觸發圖片分析流程（1x1 紅色 PNG）
-test-alert-image:
-	@mkdir -p agent1/watch
-	@echo "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwADhQGAWjR9awAAAABJRU5ErkJggg==" \
-		| base64 -d > agent1/watch/test-image-$$(date +%s).png
-	@echo "已放入測試圖片至 agent1/watch/"
+## 送出 Warning 測試告警到 Alertmanager
+test-warning:
+	@curl -s -X POST http://localhost:9093/api/v2/alerts \
+		-H "Content-Type: application/json" \
+		-d '[{"labels":{"alertname":"HighMemoryUsage","severity":"warning","instance":"staging-server-02","job":"node-exporter","env":"staging"},"annotations":{"summary":"記憶體使用率超過 80%","description":"staging-server-02 的記憶體使用率已達 82%，若持續上升可能影響服務穩定性"}}]'
+	@echo "已送出 Warning 測試告警至 Alertmanager (localhost:9093)"
 
-## 清除監控目錄中的測試檔案
-clean:
-	@rm -f agent1/watch/*.txt agent1/watch/*.png agent1/watch/*.jpg \
-		agent1/watch/*.jpeg agent1/watch/*.gif agent1/watch/*.bmp agent1/watch/*.webp
-	@echo "已清除 agent1/watch/ 中的測試檔案"
+## 同時送出 Critical 與 Warning 測試告警
+test-all: test-critical test-warning

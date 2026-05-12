@@ -1,6 +1,20 @@
 package main
 
-// AgentCard 用於解析從 Agent 2 /.well-known/agent.json 取得的能力描述
+// AlertmanagerAlert 代表從 Alertmanager API 取得的單一告警
+type AlertmanagerAlert struct {
+	Fingerprint string            `json:"fingerprint"`
+	Status      AlertStatus       `json:"status"`
+	Labels      map[string]string `json:"labels"`
+	Annotations map[string]string `json:"annotations"`
+	StartsAt    string            `json:"startsAt"`
+	EndsAt      string            `json:"endsAt"`
+}
+
+type AlertStatus struct {
+	State string `json:"state"`
+}
+
+// AgentCard 用於解析從 Agent 2 / Agent 3 /.well-known/agent.json 取得的能力描述
 type AgentCard struct {
 	Name         string       `json:"name"`
 	Description  string       `json:"description"`

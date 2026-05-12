@@ -21,7 +21,7 @@ func main() {
 	mux.HandleFunc("/", handleRPC)
 
 	addr := ":" + port
-	log.Printf("[Agent3] ImageAnalyzerAgent 啟動於 %s", addr)
+	log.Printf("[Agent3] WarningAlertAnalyzerAgent 啟動於 %s", addr)
 	log.Printf("[Agent3] Agent Card: http://localhost%s/.well-known/agent.json", addr)
 	if err := http.ListenAndServe(addr, mux); err != nil {
 		log.Fatalf("[Agent3] 伺服器錯誤：%v", err)

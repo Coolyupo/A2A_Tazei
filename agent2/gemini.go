@@ -9,7 +9,7 @@ import (
 	"google.golang.org/api/option"
 )
 
-func analyzeWithGemini(filename, content string) (string, error) {
+func analyzeWithGemini(alertContent string) (string, error) {
 	apiKey := os.Getenv("GEMINI_API_KEY")
 	if apiKey == "" {
 		return "", fmt.Errorf("GEMINI_API_KEY 未設定")
@@ -24,18 +24,19 @@ func analyzeWithGemini(filename, content string) (string, error) {
 
 	model := client.GenerativeModel("gemini-2.5-flash-lite")
 
-	prompt := fmt.Sprintf(`你是一個專業的安全分析 Agent。
-以下是一份被 Agent 1 標記為異常的文字檔案（檔名：%s），請進行深入分析：
+	prompt := fmt.Sprintf(`你是一個專業的 SRE（Site Reliability Engineer）。
+以下是一筆來自 Alertmanager 的 **Critical** 級別告警，請立即進行緊急分析：
 
---- 檔案內容開始 ---
+--- 告警內容開始 ---
 %s
---- 檔案內容結束 ---
+--- 告警內容結束 ---
 
 請提供以下分析：
-1. **內容摘要**：簡述檔案主要內容
-2. **異常指標**：列出發現的可疑或異常特徵（若無則說明）
-3. **風險評估**：整體風險等級（低 / 中 / 高）並說明理由
-4. **建議處置**：具體的後續行動建議`, filename, content)
+1. **告警摘要**：說明此告警的核心問題是什麼
+2. **影響評估**：此 Critical 告警可能影響的服務或系統範圍
+3. **根因推測**：基於標籤與 Annotations 推測最可能的根因
+4. **緊急處置**：立即應採取的緊急行動（優先順序排列）
+5. **後續追蹤**：問題緩解後需要進行的後續排查步驟`, alertContent)
 
 	resp, err := model.GenerateContent(ctx, genai.Text(prompt))
 	if err != nil {

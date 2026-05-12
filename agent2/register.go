@@ -19,10 +19,10 @@ func getEnv(key, def string) string {
 
 func startRegistration(selfURL, registryURL string) {
 	card := AgentCard{
-		Name:        "TextAnalyzerAgent",
-		Description: "接收 .txt 文字檔案，使用 Gemini 進行異常分析",
+		Name:        "CriticalAlertAnalyzerAgent",
+		Description: "接收 Alertmanager Critical 告警，使用 Gemini 進行深度根因分析",
 		URL:         selfURL,
-		Version:     "2.0.0",
+		Version:     "3.0.0",
 		Capabilities: Capabilities{
 			Streaming:              false,
 			PushNotifications:      false,
@@ -30,9 +30,9 @@ func startRegistration(selfURL, registryURL string) {
 		},
 		Skills: []AgentSkill{
 			{
-				ID:          "analyze_txt",
-				Name:        "Text File Anomaly Analysis",
-				Description: "分析 .txt 文字檔案內容，判斷是否有異常並產生報告",
+				ID:          "analyze_critical",
+				Name:        "Critical Alert Analysis",
+				Description: "分析 Alertmanager Critical 告警，評估影響範圍並給出緊急處置建議",
 				InputModes:  []string{"text"},
 				OutputModes: []string{"text"},
 			},

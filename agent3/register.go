@@ -19,10 +19,10 @@ func getEnv(key, def string) string {
 
 func startRegistration(selfURL, registryURL string) {
 	card := AgentCard{
-		Name:        "ImageAnalyzerAgent",
-		Description: "接收圖片檔案，使用 Gemini Vision 進行異常分析",
+		Name:        "WarningAlertAnalyzerAgent",
+		Description: "接收 Alertmanager Warning 告警，使用 Gemini 進行趨勢分析與預防建議",
 		URL:         selfURL,
-		Version:     "1.0.0",
+		Version:     "3.0.0",
 		Capabilities: Capabilities{
 			Streaming:              false,
 			PushNotifications:      false,
@@ -30,10 +30,10 @@ func startRegistration(selfURL, registryURL string) {
 		},
 		Skills: []AgentSkill{
 			{
-				ID:          "analyze_image",
-				Name:        "Image Anomaly Analysis",
-				Description: "分析圖片內容，判斷是否有異常（支援 jpg/png/gif/bmp/webp）",
-				InputModes:  []string{"image"},
+				ID:          "analyze_warning",
+				Name:        "Warning Alert Analysis",
+				Description: "分析 Alertmanager Warning 告警，評估潛在風險並給出預防性建議",
+				InputModes:  []string{"text"},
 				OutputModes: []string{"text"},
 			},
 		},

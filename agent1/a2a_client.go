@@ -59,9 +59,11 @@ func NewA2AClient(baseURL string) *A2AClient {
 	}
 }
 
-// SendTask 將偵測到的檔案封裝為 A2A Task，透過 JSON-RPC tasks/send 送給目標 Agent
-func (c *A2AClient) SendTask(filename, content, mimeType string) (*Task, error) {
+// SendAlertTask 將 Alertmanager 告警封裝為 A2A Task，透過 JSON-RPC tasks/send 送給目標 Agent
+func (c *A2AClient) SendAlertTask(alert AlertmanagerAlert, content string) (*Task, error) {
 	taskID := uuid.New().String()
+	alertName := alert.Labels["alertname"]
+	severity := alert.Labels["severity"]
 
 	task := Task{
 		ID:        taskID,
@@ -73,15 +75,7 @@ func (c *A2AClient) SendTask(filename, content, mimeType string) (*Task, error) 
 				Parts: []Part{
 					{
 						Type: "text",
-						Text: fmt.Sprintf("偵測到檔案：%s，請進行分析", filename),
-					},
-					{
-						Type: "file",
-						File: &FilePart{
-							Name:     filename,
-							MimeType: mimeType,
-							Content:  content,
-						},
+						Text: content,
 					},
 				},
 			},
@@ -98,7 +92,7 @@ func (c *A2AClient) SendTask(filename, content, mimeType string) (*Task, error) 
 		return nil, fmt.Errorf("序列化 Task 失敗：%w", err)
 	}
 
-	log.Printf("[Agent1] 送出 Task | ID: %s | 檔案: %s | Agent: %s", taskID, filename, c.BaseURL)
+	log.Printf("[Agent1] 送出 Task | ID: %s | 告警: %s (%s) | Agent: %s", taskID, alertName, severity, c.BaseURL)
 
 	resp, err := c.httpClient.Post(c.BaseURL+"/", "application/json", bytes.NewReader(body))
 	if err != nil {

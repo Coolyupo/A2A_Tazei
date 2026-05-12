@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/base64"
 	"fmt"
 	"os"
 
@@ -10,15 +9,10 @@ import (
 	"google.golang.org/api/option"
 )
 
-func analyzeImageWithGemini(filename, base64Content, mimeType string) (string, error) {
+func analyzeWithGemini(alertContent string) (string, error) {
 	apiKey := os.Getenv("GEMINI_API_KEY")
 	if apiKey == "" {
 		return "", fmt.Errorf("GEMINI_API_KEY 未設定")
-	}
-
-	imageBytes, err := base64.StdEncoding.DecodeString(base64Content)
-	if err != nil {
-		return "", fmt.Errorf("base64 解碼失敗：%w", err)
 	}
 
 	ctx := context.Background()
@@ -30,19 +24,21 @@ func analyzeImageWithGemini(filename, base64Content, mimeType string) (string, e
 
 	model := client.GenerativeModel("gemini-2.5-flash-lite")
 
-	prompt := fmt.Sprintf(`你是一個專業的安全分析 Agent。
-以下是一張被 Agent 1 標記為需要分析的圖片（檔名：%s），請進行深入分析：
+	prompt := fmt.Sprintf(`你是一個專業的 SRE（Site Reliability Engineer）。
+以下是一筆來自 Alertmanager 的 **Warning** 級別告警，請進行趨勢分析與預防性評估：
+
+--- 告警內容開始 ---
+%s
+--- 告警內容結束 ---
 
 請提供以下分析：
-1. **內容描述**：簡述圖片主要內容
-2. **異常指標**：列出發現的可疑或異常特徵（若無則說明）
-3. **風險評估**：整體風險等級（低 / 中 / 高）並說明理由
-4. **建議處置**：具體的後續行動建議`, filename)
+1. **告警摘要**：說明此告警的核心問題是什麼
+2. **趨勢判斷**：此 Warning 告警是否可能演變為 Critical？說明判斷依據
+3. **潛在風險**：若不處理，預計可能發生的後果
+4. **預防建議**：在問題惡化前應採取的預防措施（優先順序排列）
+5. **觀察指標**：建議持續監控哪些指標以掌握狀況變化`, alertContent)
 
-	resp, err := model.GenerateContent(ctx,
-		genai.Text(prompt),
-		genai.Blob{MIMEType: mimeType, Data: imageBytes},
-	)
+	resp, err := model.GenerateContent(ctx, genai.Text(prompt))
 	if err != nil {
 		return "", fmt.Errorf("Gemini 生成失敗：%w", err)
 	}

@@ -1,5 +1,87 @@
 # Work Log
 
+## v4.0 — Agent 3 加入 Agentic 決策 + Agent 1 加入 Slack 通知
+
+### 架構變更
+
+**Agent 3 — Agentic Warning 分析**：
+
+- 移除單純分析回傳的模式，改為 **Agentic Loop**：Gemini 不只分析，同時做出自主決策（`silence` / `escalate`）
+- 新增 `analyzeAndDecide()` 函式：一次呼叫 Gemini 同時產出完整分析報告與決策 JSON `{"decision":"...", "reason":"...", "analysis":"..."}`
+- 新增 `alertmanager.go`：當 Gemini 判定為不重要時，自主呼叫 Alertmanager `POST /api/v2/silences`，建立 48 小時 Silence（以告警原始 labels 作為 matchers）
+- `server.go` 在 Task 完成後附帶 `Metadata`：`action`（silence/escalate）、`reason`（AI 決策理由）、`silence_id`（靜默 ID）
+- 更新 `.env.example`：新增 `ALERTMANAGER_URL`
+
+**Agent 1 — Slack 通知整合**：
+
+- 新增 `slack.go`：Slack Incoming Webhook 發送，支援 Attachment 格式（color-coded：紅色 critical、橘色 warning 升級）
+- `alertmanager.go` 更新 `routeAlert()`：
+  - Critical 告警 → Agent 2 分析完成後一律送 Slack
+  - Warning 告警 → Agent 3 回傳 `action=escalate` 時送 Slack，`action=silence` 時只記錄 log
+- `main.go` 讀取 `SLACK_WEBHOOK_URL` 環境變數並傳入 Poller
+- 更新 `.env.example`：新增 `SLACK_WEBHOOK_URL`
+
+**跨 Agent Task Metadata**：
+
+- `agent1/types.go` 與 `agent3/types.go` 的 `Task` struct 新增 `Metadata map[string]string`
+- Agent 1 送 Task 時附帶 `fingerprint` 與 `labels`（JSON 字串），供 Agent 3 建立 Silence 時使用
+- Agent 3 回傳時附帶 `action`、`reason`、`silence_id`，供 Agent 1 判斷是否發送 Slack
+
+### 決策流程
+
+```
+Warning 告警進來
+    │
+    ▼
+Agent 3 Gemini 分析
+    │
+    ├── decision=silence → POST /api/v2/silences（48h）→ 回傳 action=silence
+    │                                                      Agent 1 記 log，不通知
+    │
+    └── decision=escalate → 回傳 action=escalate
+                             Agent 1 送 Slack 通知
+
+Critical 告警進來
+    │
+    ▼
+Agent 2 Gemini 根因分析
+    │
+    └── 一律 → Agent 1 送 Slack 通知
+```
+
+### 環境準備
+
+```bash
+# Slack Webhook 設定（選填，不設定則只輸出 log）
+echo "SLACK_WEBHOOK_URL=https://hooks.slack.com/services/..." >> agent1/.env
+
+# Alertmanager URL（agent3 用於建立 silence，預設已指向 localhost:9093）
+echo "ALERTMANAGER_URL=http://localhost:9093" >> agent3/.env
+```
+
+### 新增檔案
+
+| 檔案 | 說明 |
+|------|------|
+| `agent3/alertmanager.go` | Alertmanager Silence API 呼叫邏輯 |
+| `agent1/slack.go` | Slack Incoming Webhook 發送 |
+
+### 修改檔案
+
+| 檔案 | 修改重點 |
+|------|---------|
+| `agent3/gemini.go` | 改為 `analyzeAndDecide()`，返回結構化 JSON 決策 |
+| `agent3/server.go` | Agentic 決策分支：呼叫 silence API 或設定 escalate |
+| `agent3/types.go` | 新增 `AnalysisResult`、`Task.Metadata` |
+| `agent3/.env.example` | 新增 `ALERTMANAGER_URL` |
+| `agent1/alertmanager.go` | `routeAlert` 依 action 決定是否送 Slack |
+| `agent1/main.go` | 讀取並傳遞 `SLACK_WEBHOOK_URL` |
+| `agent1/a2a_client.go` | Task 附帶 `Metadata`（fingerprint + labels） |
+| `agent1/types.go` | 新增 `Task.Metadata` |
+| `agent1/.env.example` | 新增 `SLACK_WEBHOOK_URL` |
+
+---
+
 ## v3.0 — Agent 1 改為監控 Alertmanager，依 Severity 分流告警
 
 ### 架構變更

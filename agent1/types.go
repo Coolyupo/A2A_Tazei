@@ -40,11 +40,12 @@ type AgentSkill struct {
 
 // Task 是 A2A 協議中 Agent 間傳遞的工作單元
 type Task struct {
-	ID        string     `json:"id"`
-	SessionID string     `json:"sessionId"`
-	Status    TaskStatus `json:"status"`
-	Messages  []Message  `json:"messages,omitempty"`
-	Artifacts []Artifact `json:"artifacts,omitempty"`
+	ID        string            `json:"id"`
+	SessionID string            `json:"sessionId"`
+	Status    TaskStatus        `json:"status"`
+	Messages  []Message         `json:"messages,omitempty"`
+	Artifacts []Artifact        `json:"artifacts,omitempty"`
+	Metadata  map[string]string `json:"metadata,omitempty"`
 }
 
 // TaskStatus 追蹤 Task 生命週期：submitted -> working -> completed/failed

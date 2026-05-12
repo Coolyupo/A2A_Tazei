@@ -24,11 +24,18 @@ type AgentSkill struct {
 }
 
 type Task struct {
-	ID        string     `json:"id"`
-	SessionID string     `json:"sessionId"`
-	Status    TaskStatus `json:"status"`
-	Messages  []Message  `json:"messages,omitempty"`
-	Artifacts []Artifact `json:"artifacts,omitempty"`
+	ID        string            `json:"id"`
+	SessionID string            `json:"sessionId"`
+	Status    TaskStatus        `json:"status"`
+	Messages  []Message         `json:"messages,omitempty"`
+	Artifacts []Artifact        `json:"artifacts,omitempty"`
+	Metadata  map[string]string `json:"metadata,omitempty"`
+}
+
+type AnalysisResult struct {
+	Decision string `json:"decision"` // "silence" or "escalate"
+	Reason   string `json:"reason"`
+	Analysis string `json:"analysis"`
 }
 
 type TaskStatus struct {

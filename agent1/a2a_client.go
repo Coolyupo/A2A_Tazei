@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 )
 
+
 // RegistryClient 向 Registry 查詢可用的 Agent
 type RegistryClient struct {
 	RegistryURL string
@@ -65,6 +66,8 @@ func (c *A2AClient) SendAlertTask(alert AlertmanagerAlert, content string) (*Tas
 	alertName := alert.Labels["alertname"]
 	severity := alert.Labels["severity"]
 
+	labelsJSON, _ := json.Marshal(alert.Labels)
+
 	task := Task{
 		ID:        taskID,
 		SessionID: c.SessionID,
@@ -79,6 +82,10 @@ func (c *A2AClient) SendAlertTask(alert AlertmanagerAlert, content string) (*Tas
 					},
 				},
 			},
+		},
+		Metadata: map[string]string{
+			"fingerprint": alert.Fingerprint,
+			"labels":      string(labelsJSON),
 		},
 	}
 

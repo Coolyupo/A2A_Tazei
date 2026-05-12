@@ -9,22 +9,22 @@ import (
 	"time"
 )
 
-func StartAlertmanagerPoller(alertmanagerURL string, pollInterval time.Duration, registry *RegistryClient) error {
+func StartAlertmanagerPoller(alertmanagerURL string, pollInterval time.Duration, registry *RegistryClient, slackWebhook string) error {
 	seen := make(map[string]bool)
 
 	log.Printf("[Agent1] 開始監控 Alertmanager：%s（每 %.0f 秒輪詢一次）", alertmanagerURL, pollInterval.Seconds())
 
-	pollAlertmanager(alertmanagerURL, seen, registry)
+	pollAlertmanager(alertmanagerURL, seen, registry, slackWebhook)
 
 	ticker := time.NewTicker(pollInterval)
 	defer ticker.Stop()
 	for range ticker.C {
-		pollAlertmanager(alertmanagerURL, seen, registry)
+		pollAlertmanager(alertmanagerURL, seen, registry, slackWebhook)
 	}
 	return nil
 }
 
-func pollAlertmanager(alertmanagerURL string, seen map[string]bool, registry *RegistryClient) {
+func pollAlertmanager(alertmanagerURL string, seen map[string]bool, registry *RegistryClient, slackWebhook string) {
 	url := strings.TrimRight(alertmanagerURL, "/") + "/api/v2/alerts"
 	resp, err := http.Get(url)
 	if err != nil {
@@ -49,14 +49,14 @@ func pollAlertmanager(alertmanagerURL string, seen map[string]bool, registry *Re
 		}
 		seen[alert.Fingerprint] = true
 		newCount++
-		go routeAlert(alert, registry)
+		go routeAlert(alert, registry, slackWebhook)
 	}
 
 	if newCount > 0 {
 		log.Printf("[Agent1] 發現 %d 筆新告警", newCount)
 	}
 
-	// 清除已解除告警的快取，讓同一告警重新觸發時可被再次處理
+	// 清除已解除告警的快取
 	active := make(map[string]bool)
 	for _, alert := range alerts {
 		if alert.Status.State == "active" {
@@ -70,7 +70,7 @@ func pollAlertmanager(alertmanagerURL string, seen map[string]bool, registry *Re
 	}
 }
 
-func routeAlert(alert AlertmanagerAlert, registry *RegistryClient) {
+func routeAlert(alert AlertmanagerAlert, registry *RegistryClient, slackWebhook string) {
 	severity := strings.ToLower(alert.Labels["severity"])
 	alertName := alert.Labels["alertname"]
 
@@ -100,6 +100,25 @@ func routeAlert(alert AlertmanagerAlert, registry *RegistryClient) {
 	}
 
 	printResult(result)
+
+	switch severity {
+	case "critical":
+		// Critical 告警分析結果一律送 Slack
+		sendAlertToSlack(slackWebhook, alert, result, "critical")
+	case "warning":
+		// Warning 告警依 Agent3 的 agentic 決策決定
+		action := result.Metadata["action"]
+		switch action {
+		case "escalate":
+			log.Printf("[Agent1] Agent3 決策升級，送出 Slack 通知")
+			sendAlertToSlack(slackWebhook, alert, result, "warning")
+		case "silence":
+			log.Printf("[Agent1] Agent3 已自動 Silence 48小時（SilenceID: %s，原因: %s）",
+				result.Metadata["silence_id"], result.Metadata["reason"])
+		default:
+			log.Printf("[Agent1] Agent3 回傳未知 action=%q，略過 Slack 通知", action)
+		}
+	}
 }
 
 func formatAlertContent(alert AlertmanagerAlert) string {
@@ -126,6 +145,9 @@ func printResult(task *Task) {
 	log.Printf("[Agent1] Task ID : %s", task.ID)
 	log.Printf("[Agent1] Session : %s", task.SessionID)
 	log.Printf("[Agent1] 狀態    : %s", task.Status.State)
+	if action := task.Metadata["action"]; action != "" {
+		log.Printf("[Agent1] AI 決策 : %s（%s）", action, task.Metadata["reason"])
+	}
 	log.Println("[Agent1] -------- 分析報告 --------")
 
 	if len(task.Artifacts) == 0 {

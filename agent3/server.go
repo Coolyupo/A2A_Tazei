@@ -10,9 +10,9 @@ import (
 func serveAgentCard(w http.ResponseWriter, r *http.Request) {
 	card := AgentCard{
 		Name:        "WarningAlertAnalyzerAgent",
-		Description: "接收 Alertmanager Warning 告警，使用 Gemini 進行趨勢分析與預防建議",
+		Description: "接收 Alertmanager Warning 告警，使用 Gemini 自主判斷是否 Silence 或升級通知",
 		URL:         getEnv("SELF_URL", "http://localhost:8081"),
-		Version:     "3.0.0",
+		Version:     "4.0.0",
 		Capabilities: Capabilities{
 			Streaming:              false,
 			PushNotifications:      false,
@@ -22,7 +22,7 @@ func serveAgentCard(w http.ResponseWriter, r *http.Request) {
 			{
 				ID:          "analyze_warning",
 				Name:        "Warning Alert Analysis",
-				Description: "分析 Alertmanager Warning 告警，評估潛在風險並給出預防性建議",
+				Description: "分析 Warning 告警，自主決策：自動 Silence 48小時（不重要）或升級給 Agent 1 通知（重要）",
 				InputModes:  []string{"text"},
 				OutputModes: []string{"text"},
 			},
@@ -66,9 +66,9 @@ func handleTaskSend(w http.ResponseWriter, req JSONRPCRequest) {
 	task.Status = TaskStatus{State: "working", Timestamp: time.Now().Format(time.RFC3339)}
 
 	alertContent := extractTextContent(task.Messages)
-	log.Printf("[Agent3] 正在分析 Warning 告警 (%d bytes)", len(alertContent))
+	log.Printf("[Agent3] 正在分析 Warning 告警（agentic 模式，%d bytes）", len(alertContent))
 
-	analysis, err := analyzeWithGemini(alertContent)
+	result, err := analyzeAndDecide(alertContent)
 	if err != nil {
 		log.Printf("[Agent3] 分析失敗：%v", err)
 		task.Status = TaskStatus{State: "failed", Timestamp: time.Now().Format(time.RFC3339)}
@@ -76,15 +76,45 @@ func handleTaskSend(w http.ResponseWriter, req JSONRPCRequest) {
 		return
 	}
 
+	log.Printf("[Agent3] AI 決策：%s（原因：%s）", result.Decision, result.Reason)
+
+	if task.Metadata == nil {
+		task.Metadata = make(map[string]string)
+	}
+	task.Metadata["action"] = result.Decision
+	task.Metadata["reason"] = result.Reason
+
+	if result.Decision == "silence" {
+		var labels map[string]string
+		if labelsStr := task.Metadata["labels"]; labelsStr != "" {
+			json.Unmarshal([]byte(labelsStr), &labels)
+		}
+		if len(labels) == 0 {
+			labels = map[string]string{"alertname": "unknown"}
+		}
+
+		silenceID, err := silenceAlert(labels, 48*time.Hour, result.Reason)
+		if err != nil {
+			log.Printf("[Agent3] 自動 Silence 失敗：%v，改為 escalate", err)
+			task.Metadata["action"] = "escalate"
+			task.Metadata["silence_error"] = err.Error()
+		} else {
+			task.Metadata["silence_id"] = silenceID
+			log.Printf("[Agent3] 告警已自動 Silence 48小時（SilenceID: %s）", silenceID)
+		}
+	} else {
+		log.Printf("[Agent3] 告警需要升級 → 回傳 Agent1 透過 Slack 通知")
+	}
+
 	task.Artifacts = []Artifact{
 		{
 			Name:  "warning_alert_report",
 			Index: 0,
-			Parts: []Part{{Type: "text", Text: analysis}},
+			Parts: []Part{{Type: "text", Text: result.Analysis}},
 		},
 	}
 	task.Status = TaskStatus{State: "completed", Timestamp: time.Now().Format(time.RFC3339)}
-	log.Printf("[Agent3] Task %s 已完成", task.ID)
+	log.Printf("[Agent3] Task %s 已完成（action: %s）", task.ID, task.Metadata["action"])
 
 	writeResponse(w, req.ID, task)
 }

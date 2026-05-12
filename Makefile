@@ -21,6 +21,7 @@ setup-agent1:
 	@echo "==> 安裝 Agent 1 依賴..."
 	cd agent1 && go get github.com/google/uuid@latest
 	cd agent1 && go get github.com/joho/godotenv@latest
+	cd agent1 && go get github.com/slack-go/slack@latest
 	cd agent1 && go mod tidy
 
 setup-agent3:

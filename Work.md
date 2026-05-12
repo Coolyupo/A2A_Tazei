@@ -1,5 +1,91 @@
 # Work Log
 
+## v5.0 — Agent 2 MCP Client + Slack Bot Human-in-the-Loop 核准流程
+
+### 架構變更
+
+**Agent 2 — MCP Client + 兩階段任務**：
+
+- 新增 `mcp_client.go`：MCP SSE Client，支援 `tools/list` / `tools/call`。連線時自動執行 `initialize` + `notifications/initialized` 握手
+- `gemini.go` 新增 `selectToolWithGemini()`：用 ResponseMIMEType + ResponseSchema 強制 JSON，從 MCP 工具清單中選擇最適工具，無合適工具時選 `builtin`
+- `gemini.go` 新增 `executeBuiltinAnalysis()`：原 `analyzeWithGemini()` 重命名，作為內建 fallback
+- `server.go` 支援兩種 RPC Method：
+  - `tasks/send`（Phase 1）：分析 + 選工具 → `state: awaiting_approval` + 工具資訊寫入 `Metadata`
+  - `tasks/approve`（Phase 2）：從 pending store 取出任務 → 執行 MCP tool 或 builtin → `state: completed`
+- `server.go` 加入 pending task store（`map[string]*PendingTask` + `sync.RWMutex`）及 15 分鐘 TTL 清理 goroutine
+- `main.go` 啟動時嘗試連線 `MCP_SERVER_URL`，失敗則以 builtin 模式繼續
+- `types.go` 新增 `MCPTool`、`ToolChoice`、`PendingTask`、`Task.Metadata`
+- `.env.example` 新增 `MCP_SERVER_URL`
+
+**Agent 1 — Slack Bot Socket Mode + 兩階段 Critical 流程**：
+
+- 新增 `slack_bot.go`：
+  - `SlackBot`：封裝 `slack.Client` + `socketmode.Client`，Background 啟動 Socket Mode
+  - `ApprovalManager`：管理 `map[string]*PendingApproval`（thread-safe），每個 PendingApproval 帶 `ResultCh chan *ApprovalResult`
+  - `PostApprovalRequest()`：發送 Block Kit 訊息，帶 `[✅ Approve]` 按鈕，`action_id=approve_task`，`value=taskID`
+  - Socket Mode 收到 `InteractionTypeBlockActions` 後 Ack → 查找 pending → 呼叫 `client.ApproveTask()` → 送結果到 `ResultCh`
+  - 逾時後更新 Slack 訊息為「已過期」
+- `a2a_client.go` 新增 `ApproveTask(taskID string)`：發送 `tasks/approve` JSON-RPC 到 Agent 2
+- `alertmanager.go` 重構：
+  - `routeCritical()`：Phase 1 → Slack 核准（10 分鐘 `select`） → Phase 2 → 結果送 Slack
+  - `routeWarning()`：維持原 Agent 3 Agentic 路由
+  - Slack Bot 未設定時自動核准（`autoApproveAndNotify`）
+- `main.go` 讀取 `SLACK_BOT_TOKEN`、`SLACK_APP_TOKEN`、`SLACK_CHANNEL_ID`，初始化 Bot
+- `.env.example` 新增三個 Slack Bot 環境變數
+
+**新增依賴**：
+- `agent1/go.mod`：`github.com/slack-go/slack v0.23.1`
+
+### 完整流程
+
+```
+Critical 告警 → Agent 1 → Agent 2 tasks/send
+                              ├─ MCP tools/list（有設定則呼叫）
+                              ├─ Gemini 選工具（or builtin）
+                              └─ 回傳 awaiting_approval
+           Agent 1 ─── Slack Bot PostMessage（Approve 按鈕）
+           Agent 1 ─── 等待 10 分鐘
+           User ──────── 點 [✅ Approve]
+           SlackBot ──── Agent 2 tasks/approve
+                              └─ 執行 MCP tool / builtin
+                              └─ 回傳 completed
+           Agent 1 ─── Slack Incoming Webhook（結果）
+```
+
+### 環境準備
+
+```bash
+# Slack App 需要設定：
+# 1. 啟用 Socket Mode，建立 App-Level Token（scope: connections:write）
+# 2. Bot Token Scopes：chat:write
+# 3. 啟用 Interactivity
+
+echo "SLACK_BOT_TOKEN=xoxb-..." >> agent1/.env
+echo "SLACK_APP_TOKEN=xapp-..." >> agent1/.env
+echo "SLACK_CHANNEL_ID=C0123456789" >> agent1/.env
+
+# MCP Server（Agent 2，選填）
+echo "MCP_SERVER_URL=http://your-mcp-server:3000" >> agent2/.env
+```
+
+### 新增/修改檔案
+
+| 檔案 | 說明 |
+|------|------|
+| `agent2/mcp_client.go` | MCP SSE Client（新增） |
+| `agent2/gemini.go` | selectToolWithGemini + executeBuiltinAnalysis（改寫） |
+| `agent2/server.go` | tasks/send Phase 1 + tasks/approve Phase 2（改寫） |
+| `agent2/types.go` | MCPTool, ToolChoice, PendingTask, Task.Metadata（新增） |
+| `agent2/main.go` | 初始化 MCP Client（更新） |
+| `agent2/.env.example` | 新增 MCP_SERVER_URL |
+| `agent1/slack_bot.go` | SlackBot + ApprovalManager（新增） |
+| `agent1/a2a_client.go` | 新增 ApproveTask()（更新） |
+| `agent1/alertmanager.go` | routeCritical 兩階段 + routeWarning（改寫） |
+| `agent1/main.go` | 初始化 Slack Bot（更新） |
+| `agent1/.env.example` | 新增 Bot/App Token、Channel ID |
+
+---
+
 ## v4.0 — Agent 3 加入 Agentic 決策 + Agent 1 加入 Slack 通知
 
 ### 架構變更

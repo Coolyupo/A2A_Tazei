@@ -1,6 +1,7 @@
 package main
 
-// AgentCard 是 A2A 協議的 Agent 自我描述，暴露於 /.well-known/agent.json
+import "encoding/json"
+
 type AgentCard struct {
 	Name         string       `json:"name"`
 	Description  string       `json:"description"`
@@ -24,28 +25,25 @@ type AgentSkill struct {
 	OutputModes []string `json:"outputModes"`
 }
 
-// Task 是 A2A 協議中 Agent 間傳遞的工作單元
 type Task struct {
-	ID        string     `json:"id"`
-	SessionID string     `json:"sessionId"`
-	Status    TaskStatus `json:"status"`
-	Messages  []Message  `json:"messages,omitempty"`
-	Artifacts []Artifact `json:"artifacts,omitempty"`
+	ID        string            `json:"id"`
+	SessionID string            `json:"sessionId"`
+	Status    TaskStatus        `json:"status"`
+	Messages  []Message         `json:"messages,omitempty"`
+	Artifacts []Artifact        `json:"artifacts,omitempty"`
+	Metadata  map[string]string `json:"metadata,omitempty"`
 }
 
-// TaskStatus 追蹤 Task 生命週期：submitted -> working -> completed/failed
 type TaskStatus struct {
 	State     string `json:"state"`
 	Timestamp string `json:"timestamp,omitempty"`
 }
 
-// Message 代表對話中的一則訊息，role 為 "user" 或 "agent"
 type Message struct {
 	Role  string `json:"role"`
 	Parts []Part `json:"parts"`
 }
 
-// Part 是訊息的內容單元，支援 text 與 file 兩種類型
 type Part struct {
 	Type string    `json:"type"`
 	Text string    `json:"text,omitempty"`
@@ -58,14 +56,12 @@ type FilePart struct {
 	Content  string `json:"content"`
 }
 
-// Artifact 是 Agent 執行完成後產出的結果
 type Artifact struct {
 	Name  string `json:"name"`
 	Parts []Part `json:"parts"`
 	Index int    `json:"index"`
 }
 
-// JSON-RPC 2.0 傳輸層結構
 type JSONRPCRequest struct {
 	JSONRPC string      `json:"jsonrpc"`
 	ID      string      `json:"id"`
@@ -83,4 +79,27 @@ type JSONRPCResponse struct {
 type RPCError struct {
 	Code    int    `json:"code"`
 	Message string `json:"message"`
+}
+
+// MCPTool 描述從 MCP Server 發現的工具
+type MCPTool struct {
+	Name        string          `json:"name"`
+	Description string          `json:"description"`
+	InputSchema json.RawMessage `json:"inputSchema,omitempty"`
+}
+
+// ToolChoice 是 Gemini 分析後選定的工具及其執行參數
+type ToolChoice struct {
+	Tool        string            `json:"tool"`        // 工具名稱或 "builtin"
+	Source      string            `json:"source"`      // "mcp" 或 "builtin"
+	Args        map[string]string `json:"args"`        // 工具執行參數
+	Reason      string            `json:"reason"`      // 選擇理由
+	Description string            `json:"description"` // 工具將做什麼
+}
+
+// PendingTask 儲存等待 Agent 1 核准的任務
+type PendingTask struct {
+	Task         Task
+	ToolChoice   ToolChoice
+	AlertContent string
 }

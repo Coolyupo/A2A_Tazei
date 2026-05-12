@@ -124,3 +124,40 @@ func (c *A2AClient) SendAlertTask(alert AlertmanagerAlert, content string) (*Tas
 
 	return &resultTask, nil
 }
+
+// ApproveTask 通知 Agent 2 核准並執行 Phase 2 工具
+func (c *A2AClient) ApproveTask(taskID string) (*Task, error) {
+	rpcID := uuid.New().String()
+	body, err := json.Marshal(JSONRPCRequest{
+		JSONRPC: "2.0",
+		ID:      rpcID,
+		Method:  "tasks/approve",
+		Params:  map[string]string{"taskId": taskID},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("序列化 approve 請求失敗：%w", err)
+	}
+
+	log.Printf("[Agent1] 送出 tasks/approve | TaskID: %s | Agent: %s", taskID, c.BaseURL)
+
+	resp, err := c.httpClient.Post(c.BaseURL+"/", "application/json", bytes.NewReader(body))
+	if err != nil {
+		return nil, fmt.Errorf("HTTP POST (approve) 失敗：%w", err)
+	}
+	defer resp.Body.Close()
+
+	var rpcResp JSONRPCResponse
+	if err := json.NewDecoder(resp.Body).Decode(&rpcResp); err != nil {
+		return nil, fmt.Errorf("解析 approve 回應失敗：%w", err)
+	}
+	if rpcResp.Error != nil {
+		return nil, fmt.Errorf("RPC 錯誤 [%d]：%s", rpcResp.Error.Code, rpcResp.Error.Message)
+	}
+
+	resultBytes, _ := json.Marshal(rpcResp.Result)
+	var resultTask Task
+	if err := json.Unmarshal(resultBytes, &resultTask); err != nil {
+		return nil, fmt.Errorf("解析 approve Task 結果失敗：%w", err)
+	}
+	return &resultTask, nil
+}

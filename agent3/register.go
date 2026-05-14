@@ -22,7 +22,7 @@ func startRegistration(selfURL, registryURL string) {
 		Name:        "WarningAlertAnalyzerAgent",
 		Description: "接收 Alertmanager Warning 告警，使用 Gemini 進行趨勢分析與預防建議",
 		URL:         selfURL,
-		Version:     "3.0.0",
+		Version:     "4.0.0",
 		Capabilities: Capabilities{
 			Streaming:              false,
 			PushNotifications:      false,

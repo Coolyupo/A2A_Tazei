@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -20,7 +21,7 @@ type RegistryClient struct {
 func NewRegistryClient(registryURL string) *RegistryClient {
 	return &RegistryClient{
 		RegistryURL: registryURL,
-		httpClient:  &http.Client{},
+		httpClient:  &http.Client{Timeout: 10 * time.Second},
 	}
 }
 
@@ -31,6 +32,10 @@ func (rc *RegistryClient) FindAgent(skill string) (string, error) {
 		return "", fmt.Errorf("查詢 Registry 失敗：%w", err)
 	}
 	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("Registry 回傳 HTTP %d", resp.StatusCode)
+	}
 
 	var cards []AgentCard
 	if err := json.NewDecoder(resp.Body).Decode(&cards); err != nil {
@@ -56,7 +61,7 @@ func NewA2AClient(baseURL string) *A2AClient {
 	return &A2AClient{
 		BaseURL:    baseURL,
 		SessionID:  uuid.New().String(),
-		httpClient: &http.Client{},
+		httpClient: &http.Client{Timeout: 90 * time.Second},
 	}
 }
 

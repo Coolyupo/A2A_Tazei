@@ -1,5 +1,47 @@
 # Work Log
 
+## v5.1 — Gemini Review 修正：健壯性補強
+
+依 Gemini CLI 代碼審查報告（2026-05-12）修正以下問題：
+
+### 修正項目
+
+**1. HTTP 連線健壯性（agent1）**
+
+- `alertmanager.go`：新增 `amHTTPClient`（15s timeout），替換原本無 timeout 的 `http.Get()`；新增 HTTP 狀態碼檢查（非 200 直接 return + log）
+- `a2a_client.go`：`NewRegistryClient` 加入 10s timeout；`NewA2AClient` 加入 90s timeout（考量 Phase 2 MCP 執行最長 60s）；`FindAgent` 新增 HTTP 狀態碼檢查
+
+**2. 啟動時環境變數強制校驗（agent2 / agent3）**
+
+- `agent2/main.go`：啟動初期檢查 `GEMINI_API_KEY`，缺少時立即 `log.Fatal`，避免收到告警後才報錯
+- `agent3/main.go`：同上
+
+**3. AgentCard 版本號一致性修正（agent2 / agent3）**
+
+- `agent2/register.go`：版本號 `3.0.0` → `4.0.0`，與 `server.go` 的 AgentCard 一致
+- `agent3/register.go`：同上
+
+### 修改檔案
+
+| 檔案 | 修改重點 |
+|------|---------|
+| `agent1/alertmanager.go` | 加 HTTP client timeout + 狀態碼檢查 |
+| `agent1/a2a_client.go` | 加 HTTP timeout（Registry 10s / A2A 90s）+ FindAgent 狀態碼檢查 |
+| `agent2/main.go` | 啟動時驗證 GEMINI_API_KEY |
+| `agent3/main.go` | 啟動時驗證 GEMINI_API_KEY |
+| `agent2/register.go` | 版本號修正 3.0.0 → 4.0.0 |
+| `agent3/register.go` | 版本號修正 3.0.0 → 4.0.0 |
+
+### 未納入修正（範圍較大）
+
+| 問題 | 原因 |
+|------|------|
+| 型別重複定義（DRY） | 需建立 Go workspace + shared 模組，屬架構重構 |
+| 狀態持久化 | 需引入 Redis / SQLite，屬功能擴展 |
+| 協議文檔化 | 需撰寫 PROTOCOL.md，無程式碼影響 |
+
+---
+
 ## v5.0 — Agent 2 MCP Client + Slack Bot Human-in-the-Loop 核准流程
 
 ### 架構變更

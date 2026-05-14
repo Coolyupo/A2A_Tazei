@@ -22,7 +22,7 @@ func startRegistration(selfURL, registryURL string) {
 		Name:        "CriticalAlertAnalyzerAgent",
 		Description: "接收 Alertmanager Critical 告警，使用 Gemini 進行深度根因分析",
 		URL:         selfURL,
-		Version:     "3.0.0",
+		Version:     "4.0.0",
 		Capabilities: Capabilities{
 			Streaming:              false,
 			PushNotifications:      false,

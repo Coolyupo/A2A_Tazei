@@ -3,12 +3,17 @@ package main
 import (
 	"log"
 	"net/http"
+	"os"
 
 	"github.com/joho/godotenv"
 )
 
 func main() {
 	_ = godotenv.Load()
+
+	if os.Getenv("GEMINI_API_KEY") == "" {
+		log.Fatal("[Agent3] 缺少必要的環境變數：GEMINI_API_KEY")
+	}
 
 	selfURL := getEnv("SELF_URL", "http://localhost:8081")
 	registryURL := getEnv("REGISTRY_URL", "http://localhost:9000")

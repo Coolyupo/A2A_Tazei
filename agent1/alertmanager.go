@@ -24,14 +24,21 @@ func StartAlertmanagerPoller(alertmanagerURL string, pollInterval time.Duration,
 	return nil
 }
 
+var amHTTPClient = &http.Client{Timeout: 15 * time.Second}
+
 func pollAlertmanager(alertmanagerURL string, seen map[string]bool, registry *RegistryClient, slackWebhook string, bot *SlackBot, am *ApprovalManager, channelID string) {
 	url := strings.TrimRight(alertmanagerURL, "/") + "/api/v2/alerts"
-	resp, err := http.Get(url)
+	resp, err := amHTTPClient.Get(url)
 	if err != nil {
 		log.Printf("[Agent1] 無法連線到 Alertmanager：%v", err)
 		return
 	}
 	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		log.Printf("[Agent1] Alertmanager 回傳 HTTP %d", resp.StatusCode)
+		return
+	}
 
 	var alerts []AlertmanagerAlert
 	if err := json.NewDecoder(resp.Body).Decode(&alerts); err != nil {
